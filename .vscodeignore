@@ -1,0 +1,15 @@
+# Git / meta
+.git/
+.gitignore
+.github/
+
+# VS Code dev files
+.vscode/
+.vscode-test/
+
+# Build / packaging leftovers
+*.vsix
+
+# OS junk
+.DS_Store
+Thumbs.db

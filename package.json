@@ -1,0 +1,36 @@
+{
+  "name": "badger",
+  "displayName": "Badger",
+  "description": "Marks folders as PASS or FAIL based on .pass / .fail marker files.",
+  "version": "1.0.0",
+  "publisher": "voidcsillag",
+  "icon": "img/icon.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "repository": {
+      "type": "git",
+      "url": "https://github.com/xsnpdngv/badger"
+  },
+  "categories": [
+    "Testing"
+  ],
+  "keywords": [
+    "pass",
+    "fail",
+    "status",
+    "test",
+    "testing",
+    "marker",
+    "filesystem",
+    "folder",
+    "directory",
+    "explorer"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onWorkspaceFoldersChanged"
+  ],
+  "main": "./extension.js",
+  "contributes": {}
+}
