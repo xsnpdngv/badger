@@ -77,10 +77,10 @@ function activate(context)
 
     async function openLastCreatedFolder(folderUri)
     {
+        await vscode.commands.executeCommand('workbench.view.explorer');
         await vscode.commands.executeCommand(
-            'vscode.openFolder',
-            folderUri,
-            true
+            'revealInExplorer',
+            folderUri
         );
     }
 
@@ -133,7 +133,7 @@ function activate(context)
                 );
 
             statusBarItem.text =
-                `$(beaker) New test folder: ${label}`;
+                `$(link) ${label}`;
 
             statusBarItem.command =
             {
