@@ -2,7 +2,7 @@
   "name": "badger",
   "displayName": "Badger",
   "description": "Marks folders as PASS or FAIL based on .pass / .fail marker files.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "voidcsillag",
   "icon": "img/icon.png",
   "engines": {
@@ -32,5 +32,25 @@
     "onWorkspaceFoldersChanged"
   ],
   "main": "./extension.js",
-  "contributes": {}
+  "contributes": {
+    "configuration": {
+      "title": "Badger",
+      "properties": {
+        "badger.watchDirectories": {
+          "type": "array",
+          "default": ["tests"],
+          "items": {
+            "type": "string"
+          },
+          "description": "Directories under which creation of new test folders should be reported."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "badger.openLastTestFolder",
+        "title": "Open Latest Test Folder"
+      }
+    ]
+  }
 }
