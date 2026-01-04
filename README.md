@@ -1,6 +1,6 @@
 # Badger
 
-### Overview
+## Overview
 
 Badger adds lightweight, filesystem-driven signals to the VS Code Explorer.
 
@@ -68,10 +68,31 @@ Only folders created under these paths will trigger notifications.
 
 ## Usage
 
+Install the [Badger
+extension](https://marketplace.visualstudio.com/items?itemName=voidcsillag.badger)
+from the VS Code Marketplace, or as an alternative, the extension can be
+built as a `.vsix` package and then be debugged or installed manually:
+
+```bash
+git clone https://github.com/xsnpdngv/badger.git
+cd badger
+
+npm install
+npm install -g @vscode/vsce # if not installed yet
+vsce package
+
+code --install-extension badger-<version>.vsix
+```
+
+
 ### Folder Badging
 
 1. An empty file named `.pass` or `.fail` is created inside any folder
 2. The Explorer updates automatically
+
+![Screenshot](./img/screenshot-badge.png)
+
+---
 
 ### Folder Creation Notification
 
@@ -80,11 +101,7 @@ Only folders created under these paths will trigger notifications.
    - A status bar message appears
    - Clicking the message navigates directly to the folder
 
----
-
-## Screenshot
-
-![Screenshot](./img/screenshot.png)
+![Screenshot](./img/screenshot-notif.png)
 
 ---
 

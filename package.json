@@ -1,8 +1,8 @@
 {
   "name": "badger",
   "displayName": "Badger",
-  "description": "Marks folders as PASS or FAIL based on .pass / .fail marker files.",
-  "version": "1.1.0",
+  "description": "Adds lightweight, filesystem-driven signals to the VS Code Explorer",
+  "version": "1.1.1",
   "publisher": "voidcsillag",
   "icon": "img/icon.png",
   "engines": {

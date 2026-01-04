@@ -9,6 +9,7 @@
 
 # Build / packaging leftovers
 *.vsix
+package-lock.json
 
 # OS junk
 .DS_Store
