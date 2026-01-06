@@ -57,9 +57,22 @@ function activate(context) {
         dismissBtn.hide();
     }
 
+    /**
+     * Reveals the folder and ensures it expands.
+     * We pass select: true to revealInExplorer to force focus immediately.
+     */
     async function openLastCreatedFolder(folderUri) {
+        if (!folderUri) return;
+
+        // Ensure explorer is visible
         await vscode.commands.executeCommand('workbench.view.explorer');
+
+        // revealInExplorer supports an object with 'select' and 'focus'
+        // This ensures the sidebar targets this specific URI before we expand
         await vscode.commands.executeCommand('revealInExplorer', folderUri);
+
+        // By selecting the item, we ensure 'list.expand' hits the right target
+        await vscode.commands.executeCommand('list.expand');
     }
 
     const openFolderCommand = vscode.commands.registerCommand('badger.openLastTestFolder', openLastCreatedFolder);
@@ -70,7 +83,7 @@ function activate(context) {
      */
     function isWatchedTestFolder(uri) {
         if (!vscode.workspace.workspaceFolders) return false;
-        
+
         const config = vscode.workspace.getConfiguration('badger');
         const watchedRoots = config.get('watchDirectories', ['tests']);
         const wsRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
