@@ -2,15 +2,15 @@
   "name": "badger",
   "displayName": "Badger",
   "description": "Adds lightweight, filesystem-driven signals to the VS Code Explorer",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "publisher": "voidcsillag",
   "icon": "img/icon.png",
   "engines": {
     "vscode": "^1.80.0"
   },
   "repository": {
-      "type": "git",
-      "url": "https://github.com/xsnpdngv/badger"
+    "type": "git",
+    "url": "https://github.com/xsnpdngv/badger"
   },
   "categories": [
     "Testing"
@@ -29,7 +29,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onWorkspaceFoldersChanged"
+    "onWorkspaceFoldersChanged",
+    "onFileSystem:file"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -38,7 +39,9 @@
       "properties": {
         "badger.watchDirectories": {
           "type": "array",
-          "default": ["tests"],
+          "default": [
+            "tests"
+          ],
           "items": {
             "type": "string"
           },
@@ -50,6 +53,10 @@
       {
         "command": "badger.openLastTestFolder",
         "title": "Open Latest Test Folder"
+      },
+      {
+        "command": "badger.dismissStatus",
+        "title": "Dismiss Test Notification"
       }
     ]
   }
