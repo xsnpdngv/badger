@@ -69,6 +69,9 @@ function activate(context) {
         dismissBtn.hide();
     }
 
+    /**
+     * Command triggered by clicking the status bar
+     */
     async function openLastCreatedFolder(folderUri) {
         await vscode.commands.executeCommand('workbench.view.explorer');
         await vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
@@ -123,67 +126,60 @@ function activate(context) {
         }
     }
 
-    // Modification: Using RelativePattern instead of string glob to ensure the watcher
-    // attaches to the workspace root, making it resilient to missing/recreated folders.
+    // Function to process a URI and check if it's a test folder.
+    // Defined outside setupFolderWatcher so the periodic check can access it.
+    const checkAndNotify = (uri) => {
+
+        try {
+            if ( ! fs.existsSync(uri.fsPath)) {
+                return;
+            }
+
+            const stat = fs.statSync(uri.fsPath);
+            if ( ! stat.isDirectory()) {
+                return;
+            }
+
+            if (isWatchedTestFolder(uri)) {
+                const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, uri.fsPath);
+                statusBarItem.text = `$(link) ${label}`;
+                statusBarItem.command = {
+                    command: 'badger.openLastTestFolder',
+                    title: 'Open test folder',
+                    arguments: [uri]
+                };
+                statusBarItem.show();
+                dismissBtn.show();
+            } else {
+                // scan it for children that might have been missed
+                const children = fs.readdirSync(uri.fsPath);
+                for (const child of children) {
+                    checkAndNotify(vscode.Uri.file(path.join(uri.fsPath, child)));
+                }
+            }
+        } catch { /* ignore */ }
+    };
+
     function setupFolderWatcher() {
 
         if ( ! vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
             return;
         }
 
-        // const folderWatcher =
-        //     vscode.workspace.createFileSystemWatcher('**/');
         const folderWatcher =
             vscode.workspace.createFileSystemWatcher(
                 new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*')
             );
-
-        // Function to process a URI and check if it's a test folder
-        const checkAndNotify = (uri) => {
-
-            try {
-                if ( ! fs.existsSync(uri.fsPath)) {
-                    return;
-                }
-
-                const stat = fs.statSync(uri.fsPath);
-                if ( ! stat.isDirectory()) {
-                    return;
-                }
-
-                if (isWatchedTestFolder(uri)) {
-                    const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, uri.fsPath);
-                    statusBarItem.text = `$(link) ${label}`;
-                    statusBarItem.command = {
-                        command: 'badger.openLastTestFolder',
-                        title: 'Open test folder',
-                        arguments: [uri]
-                    };
-                    statusBarItem.show();
-                    dismissBtn.show();
-                } else {
-                    // scan it for children that might have been missed
-                    const children = fs.readdirSync(uri.fsPath);
-                    for (const child of children) {
-                        checkAndNotify(vscode.Uri.file(path.join(uri.fsPath, child)));
-                    }
-                }
-            } catch { /* ignore */ }
-        };
 
         folderWatcher.onDidCreate(uri => {
             checkAndNotify(uri);
         });
 
         folderWatcher.onDidDelete(uri => {
-            // Hide if the specific reported folder is deleted
             if (statusBarItem.command && statusBarItem.command.arguments[0].fsPath === uri.fsPath) {
                 hideNotification();
             }
-            // Hide if the entire 'tests' (or configured) directory is deleted
             validateWatchEnvironment();
-
-            context.subscriptions.push(folderWatcher);
         });
 
         context.subscriptions.push(folderWatcher);
@@ -191,6 +187,31 @@ function activate(context) {
 
     // Initial call
     setupFolderWatcher();
+
+    /* ------------------------------------
+     * PERIODIC CHECK (Self-Healing)
+     * ------------------------------------ */
+
+    const periodicCheck = () => {
+        if ( ! vscode.workspace.workspaceFolders) {
+            return;
+        }
+
+        const config = vscode.workspace.getConfiguration('badger');
+        const watchedRoots = config.get('watchDirectories', ['tests']);
+        const wsRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+
+        watchedRoots.forEach(root => {
+            const absolutePath = path.join(wsRoot, root);
+            if (fs.existsSync(absolutePath)) {
+                checkAndNotify(vscode.Uri.file(absolutePath));
+            }
+        });
+
+        validateWatchEnvironment();
+    };
+
+    const interval = setInterval(periodicCheck, 2000);
 
     /* ----------------------------
      * SUBSCRIPTIONS
@@ -203,7 +224,8 @@ function activate(context) {
         statusBarItem,
         dismissBtn,
         openFolderCommand,
-        dismissCommand
+        dismissCommand,
+        new vscode.Disposable(() => clearInterval(interval))
     );
 }
 
