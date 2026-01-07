@@ -59,14 +59,8 @@ function activate(context) {
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.tooltip = 'Click to open folder';
 
-    const dismissBtn = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-    dismissBtn.text = '$(x)';
-    dismissBtn.tooltip = 'Dismiss';
-    dismissBtn.command = 'badger.dismissStatus';
-
     function hideNotification() {
         statusBarItem.hide();
-        dismissBtn.hide();
     }
 
     /**
@@ -81,7 +75,6 @@ function activate(context) {
 
     // Register command once
     const openFolderCommand = vscode.commands.registerCommand('badger.openLastTestFolder', openLastCreatedFolder);
-    const dismissCommand = vscode.commands.registerCommand('badger.dismissStatus', hideNotification);
 
     /**
      * Checks if the created folder is inside any of the configured watch directories.
@@ -149,7 +142,6 @@ function activate(context) {
                     arguments: [uri]
                 };
                 statusBarItem.show();
-                dismissBtn.show();
             } else {
                 // scan it for children that might have been missed
                 const children = fs.readdirSync(uri.fsPath);
@@ -222,9 +214,7 @@ function activate(context) {
         markerWatcher,
         emitter,
         statusBarItem,
-        dismissBtn,
         openFolderCommand,
-        dismissCommand,
         new vscode.Disposable(() => clearInterval(interval))
     );
 }
