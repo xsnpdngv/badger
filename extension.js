@@ -4,49 +4,61 @@ const fs = require('fs');
 const path = require('path');
 
 function activate(context) {
+
     /* ----------------------------
      * BADGE DECORATION
      * ---------------------------- */
+
     const emitter = new vscode.EventEmitter();
+
     const provider = {
+
         onDidChangeFileDecorations: emitter.event,
+
         provideFileDecoration(uri) {
             try {
                 const stat = fs.statSync(uri.fsPath);
-                if (!stat.isDirectory()) return;
+                if ( ! stat.isDirectory()) {
+                    return;
+                }
 
                 if (fs.existsSync(path.join(uri.fsPath, '.fail'))) {
                     return {
                         badge: '×',
-                        tooltip: 'FAILED',
+                        tooltip: 'FAIL',
                         color: new vscode.ThemeColor('testing.iconFailed')
                     };
                 }
+
                 if (fs.existsSync(path.join(uri.fsPath, '.pass'))) {
                     return {
                         badge: '+',
-                        tooltip: 'PASSED'
+                        tooltip: 'PASS'
                     };
                 }
-            } catch { /* ignore fs races */ }
+            } catch { /* ignore */ }
         }
     };
 
-    const markerWatcher = vscode.workspace.createFileSystemWatcher('**/{.pass,.fail}');
+
     function refreshParent(uri) {
         const parent = vscode.Uri.file(path.dirname(uri.fsPath));
         emitter.fire([parent]);
     }
+
+    const markerWatcher = vscode.workspace.createFileSystemWatcher('**/{.pass,.fail}');
     markerWatcher.onDidCreate(refreshParent);
     markerWatcher.onDidDelete(refreshParent);
     markerWatcher.onDidChange(refreshParent);
 
+
     /* ------------------------------------
      * TEST FOLDER CREATION NOTIFIER
      * ------------------------------------ */
+
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusBarItem.tooltip = 'Click to open folder';
-    
+
     const dismissBtn = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
     dismissBtn.text = '$(x)';
     dismissBtn.tooltip = 'Dismiss';
@@ -57,24 +69,14 @@ function activate(context) {
         dismissBtn.hide();
     }
 
-    /**
-     * Reveals the folder and ensures it expands.
-     * We pass select: true to revealInExplorer to force focus immediately.
-     */
     async function openLastCreatedFolder(folderUri) {
-        if (!folderUri) return;
-
-        // Ensure explorer is visible
         await vscode.commands.executeCommand('workbench.view.explorer');
-
-        // revealInExplorer supports an object with 'select' and 'focus'
-        // This ensures the sidebar targets this specific URI before we expand
+        await vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
         await vscode.commands.executeCommand('revealInExplorer', folderUri);
-
-        // By selecting the item, we ensure 'list.expand' hits the right target
         await vscode.commands.executeCommand('list.expand');
     }
 
+    // Register command once
     const openFolderCommand = vscode.commands.registerCommand('badger.openLastTestFolder', openLastCreatedFolder);
     const dismissCommand = vscode.commands.registerCommand('badger.dismissStatus', hideNotification);
 
@@ -82,7 +84,10 @@ function activate(context) {
      * Checks if the created folder is inside any of the configured watch directories.
      */
     function isWatchedTestFolder(uri) {
-        if (!vscode.workspace.workspaceFolders) return false;
+
+        if ( ! vscode.workspace.workspaceFolders) {
+            return false;
+        }
 
         const config = vscode.workspace.getConfiguration('badger');
         const watchedRoots = config.get('watchDirectories', ['tests']);
@@ -94,7 +99,7 @@ function activate(context) {
 
             // If the relative path doesn't start with '..' and isn't absolute, 
             // it's inside the watched directory.
-            return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+            return relative && ! relative.startsWith('..') && ! path.isAbsolute(relative);
         });
     }
 
@@ -102,7 +107,8 @@ function activate(context) {
      * Validates if the base watch directories still exist.
      */
     function validateWatchEnvironment() {
-        if (!vscode.workspace.workspaceFolders) {
+
+        if ( ! vscode.workspace.workspaceFolders) {
             hideNotification();
             return;
         }
@@ -112,37 +118,61 @@ function activate(context) {
         const wsRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
 
         const anyRootExists = watchedRoots.some(root => fs.existsSync(path.join(wsRoot, root)));
-
-        if (!anyRootExists) {
+        if ( ! anyRootExists) {
             hideNotification();
         }
     }
 
-    if (vscode.workspace.workspaceFolders) {
-        const folderWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*')
-        );
+    // Modification: Using RelativePattern instead of string glob to ensure the watcher
+    // attaches to the workspace root, making it resilient to missing/recreated folders.
+    function setupFolderWatcher() {
+
+        if ( ! vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+            return;
+        }
+
+        // const folderWatcher =
+        //     vscode.workspace.createFileSystemWatcher('**/');
+        const folderWatcher =
+            vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*')
+            );
+
+        // Function to process a URI and check if it's a test folder
+        const checkAndNotify = (uri) => {
+
+            try {
+                if ( ! fs.existsSync(uri.fsPath)) {
+                    return;
+                }
+
+                const stat = fs.statSync(uri.fsPath);
+                if ( ! stat.isDirectory()) {
+                    return;
+                }
+
+                if (isWatchedTestFolder(uri)) {
+                    const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, uri.fsPath);
+                    statusBarItem.text = `$(link) ${label}`;
+                    statusBarItem.command = {
+                        command: 'badger.openLastTestFolder',
+                        title: 'Open test folder',
+                        arguments: [uri]
+                    };
+                    statusBarItem.show();
+                    dismissBtn.show();
+                } else {
+                    // scan it for children that might have been missed
+                    const children = fs.readdirSync(uri.fsPath);
+                    for (const child of children) {
+                        checkAndNotify(vscode.Uri.file(path.join(uri.fsPath, child)));
+                    }
+                }
+            } catch { /* ignore */ }
+        };
 
         folderWatcher.onDidCreate(uri => {
-            try {
-                const stat = fs.statSync(uri.fsPath);
-                if (!stat.isDirectory()) return;
-
-                if (!isWatchedTestFolder(uri)) return;
-
-                const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-                const label = path.relative(workspaceRoot, uri.fsPath);
-
-                statusBarItem.text = `$(link) ${label}`;
-                statusBarItem.command = {
-                    command: 'badger.openLastTestFolder',
-                    title: 'Open test folder',
-                    arguments: [uri]
-                };
-
-                statusBarItem.show();
-                dismissBtn.show();
-            } catch { /* race condition */ }
+            checkAndNotify(uri);
         });
 
         folderWatcher.onDidDelete(uri => {
@@ -152,10 +182,19 @@ function activate(context) {
             }
             // Hide if the entire 'tests' (or configured) directory is deleted
             validateWatchEnvironment();
+
+            context.subscriptions.push(folderWatcher);
         });
 
         context.subscriptions.push(folderWatcher);
     }
+
+    // Initial call
+    setupFolderWatcher();
+
+    /* ----------------------------
+     * SUBSCRIPTIONS
+     * ---------------------------- */
 
     context.subscriptions.push(
         vscode.window.registerFileDecorationProvider(provider),

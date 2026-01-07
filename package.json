@@ -30,7 +30,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onWorkspaceFoldersChanged",
-    "onFileSystem:file"
+    "onFileSystem"
   ],
   "main": "./extension.js",
   "contributes": {
