@@ -87,26 +87,6 @@ function activate(context) {
         emitter.fire();
     }
 
-    function refreshParents_(uri) {
-        let currentPath = path.dirname(uri.fsPath);
-        const urisToRefresh = [];
-
-        // Traverse up the directory tree
-        while (true) {
-            urisToRefresh.push(vscode.Uri.file(currentPath));
-            const nextPath = path.dirname(currentPath);
-
-            // Stop if we hit the file system root
-            if (nextPath === currentPath) {
-                break;
-            }
-            currentPath = nextPath;
-        }
-
-        // Fire the event for all ancestors to invalidate VS Code's cache
-        emitter.fire(urisToRefresh);
-    }
-
     const markerWatcher = vscode.workspace.createFileSystemWatcher('**/{.pass,.fail}');
     markerWatcher.onDidCreate(refreshParents);
     markerWatcher.onDidDelete(refreshParents);
@@ -191,6 +171,11 @@ function activate(context) {
                 const stat = fs.statSync(topLevelUri.fsPath);
                 if (stat.isDirectory()) {
                     const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, topLevelUri.fsPath);
+                    const status = getStatus(topLevelUri.fsPath);
+                    statusBarItem.color = status === 'fail' 
+                        ? new vscode.ThemeColor('testing.iconFailed') 
+                        : undefined;
+
                     statusBarItem.text = `$(link) ${label}`;
                     statusBarItem.command = {
                         command: 'badger.openLastTestFolder',
