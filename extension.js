@@ -40,7 +40,7 @@ function activate(context) {
 
         provideFileDecoration(uri) {
             try {
-                // 2. Do the cheap string/path math FIRST
+                // 1. Do the cheap string/path math FIRST
                 const config = vscode.workspace.getConfiguration('badger');
                 const watchedRoots = config.get('watchDirectories', ['tests']);
                 const wsRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -54,7 +54,7 @@ function activate(context) {
                 // If not in our watch paths, bail out immediately
                 if (!isInsideWatched) return;
 
-                // 3. Do the expensive disk check LAST, only when necessary
+                // 2. Do the expensive disk check LAST, only when necessary
                 const stat = fs.statSync(uri.fsPath);
                 if ( ! stat.isDirectory()) {
                     return;
@@ -80,17 +80,53 @@ function activate(context) {
         }
     };
 
-    function refreshParents() {
-        // Firing without arguments invalidates the entire decoration cache globally.
-        // VS Code will automatically re-request badges for all currently visible Explorer items,
-        // bypassing any URI casing or path-matching bugs.
-        emitter.fire();
+    function refreshParents(uri) {
+        if (!uri) return;
+        
+        let currentPath = path.dirname(uri.fsPath);
+        const urisToRefresh = [];
+
+        // Traverse up the directory tree to invalidate VS Code's cache for all ancestors
+        while (true) {
+            urisToRefresh.push(vscode.Uri.file(currentPath));
+            const nextPath = path.dirname(currentPath);
+            
+            if (nextPath === currentPath) {
+                break; // Hit the file system root
+            }
+            currentPath = nextPath;
+        }
+
+        // Target exactly the folders that need updating, avoiding a heavy global refresh
+        emitter.fire(urisToRefresh);
+    }
+
+    function refreshStatusBarColor() {
+        // Only run if the status bar has an active folder linked to it
+        if (statusBarItem.command && statusBarItem.command.arguments && statusBarItem.command.arguments[0]) {
+            const currentFolderUri = statusBarItem.command.arguments[0];
+            try {
+                if (fs.existsSync(currentFolderUri.fsPath)) {
+                    const status = getStatus(currentFolderUri.fsPath);
+                    statusBarItem.color = status === 'fail' 
+                        ? new vscode.ThemeColor('testing.iconFailed') 
+                        : undefined;
+                }
+            } catch { /* ignore */ }
+        }
     }
 
     const markerWatcher = vscode.workspace.createFileSystemWatcher('**/{.pass,.fail}');
-    markerWatcher.onDidCreate(refreshParents);
-    markerWatcher.onDidDelete(refreshParents);
-    markerWatcher.onDidChange(refreshParents);
+
+    // Fire both the Explorer update and the Status Bar update
+    const onMarkerChange = (uri) => {
+        refreshParents(uri);
+        refreshStatusBarColor(); 
+    };
+
+    markerWatcher.onDidCreate(onMarkerChange);
+    markerWatcher.onDidDelete(onMarkerChange);
+    markerWatcher.onDidChange(onMarkerChange);
 
 
     /* ------------------------------------
@@ -108,7 +144,6 @@ function activate(context) {
      * Command triggered by clicking the status bar
      */
     async function openLastCreatedFolder(folderUri) {
-        // await periodicCheck();
         await vscode.commands.executeCommand('workbench.view.explorer');
         await vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
         await vscode.commands.executeCommand('revealInExplorer', folderUri);
@@ -146,7 +181,6 @@ function activate(context) {
      * Validates if the base watch directories still exist.
      */
     function validateWatchEnvironment() {
-
         if ( ! vscode.workspace.workspaceFolders) {
             hideNotification();
             return;
@@ -171,17 +205,15 @@ function activate(context) {
                 const stat = fs.statSync(topLevelUri.fsPath);
                 if (stat.isDirectory()) {
                     const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, topLevelUri.fsPath);
-                    const status = getStatus(topLevelUri.fsPath);
-                    statusBarItem.color = status === 'fail' 
-                        ? new vscode.ThemeColor('testing.iconFailed') 
-                        : undefined;
-
+                    
                     statusBarItem.text = `$(link) ${label}`;
                     statusBarItem.command = {
                         command: 'badger.openLastTestFolder',
                         title: 'Open test folder',
                         arguments: [topLevelUri]
                     };
+                    
+                    refreshStatusBarColor(); // Set color before showing
                     statusBarItem.show();
                 }
             }
@@ -189,7 +221,6 @@ function activate(context) {
     };
 
     function setupFolderWatcher() {
-
         if ( ! vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
             return;
         }
@@ -240,7 +271,7 @@ function activate(context) {
                         if (child.isDirectory()) {
                             const childPath = path.join(absolutePath, child.name);
                             const stat = fs.statSync(childPath);
-                            
+
                             // Compare timestamps to find the most recently created/modified folder
                             const time = stat.birthtimeMs || stat.mtimeMs;
                             if (time > maxTime) {
@@ -261,11 +292,13 @@ function activate(context) {
                 title: 'Open test folder',
                 arguments: [newestFolder]
             };
+            
+            refreshStatusBarColor(); // Set color before showing
             statusBarItem.show();
         }
-
-        validateWatchEnvironment();
     };
+
+    periodicCheck();
 
     const interval = setInterval(periodicCheck, 2000);
 
@@ -273,12 +306,14 @@ function activate(context) {
     const configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('badger')) {
             emitter.fire(); // Global refresh
+            validateWatchEnvironment();
         }
     });
 
     // 2. Refresh when workspace folders are added or removed
     const workspaceWatcher = vscode.workspace.onDidChangeWorkspaceFolders(() => {
         emitter.fire(); // Global refresh
+        validateWatchEnvironment();
     });
 
     /* ----------------------------
