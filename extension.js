@@ -15,7 +15,7 @@ function activate(context) {
         // Use withFileTypes to get Dirent objects. This avoids doing fs.statSync on every single file!
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         let hasPass = false;
-        
+
         // Fast check for marker files in current directory
         for (const entry of entries) {
             if (entry.name === '.fail') return 'fail';
@@ -33,6 +33,20 @@ function activate(context) {
         return hasPass ? 'pass' : null;
     };
 
+    const getFailCount = (dir) => {
+        let count = 0;
+        try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.name === '.fail') {
+                    count++;
+                } else if (entry.isDirectory()) {
+                    count += getFailCount(path.join(dir, entry.name));
+                }
+            }
+        } catch { /* ignore */ }
+        return count;
+    };
 
     const provider = {
 
@@ -82,7 +96,7 @@ function activate(context) {
 
     function refreshParents(uri) {
         if (!uri) return;
-        
+
         let currentPath = path.dirname(uri.fsPath);
         const urisToRefresh = [];
 
@@ -90,7 +104,7 @@ function activate(context) {
         while (true) {
             urisToRefresh.push(vscode.Uri.file(currentPath));
             const nextPath = path.dirname(currentPath);
-            
+
             if (nextPath === currentPath) {
                 break; // Hit the file system root
             }
@@ -101,27 +115,38 @@ function activate(context) {
         emitter.fire(urisToRefresh);
     }
 
-    function refreshStatusBarColor() {
+    function refreshStatusBar() {
+        if (!vscode.workspace.workspaceFolders) return;
+
         // Only run if the status bar has an active folder linked to it
         if (statusBarItem.command && statusBarItem.command.arguments && statusBarItem.command.arguments[0]) {
             const currentFolderUri = statusBarItem.command.arguments[0];
             try {
                 if (fs.existsSync(currentFolderUri.fsPath)) {
-                    const status = getStatus(currentFolderUri.fsPath);
-                    statusBarItem.color = status === 'fail' 
-                        ? new vscode.ThemeColor('testing.iconFailed') 
-                        : undefined;
+                    // Calculate the label
+                    const wsRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                    const label = path.relative(wsRoot, currentFolderUri.fsPath);
+
+                    // Get the exact count of failures
+                    const failCount = getFailCount(currentFolderUri.fsPath);
+
+                    if (failCount > 0) {
+                        statusBarItem.color = new vscode.ThemeColor('testing.iconFailed');
+                        statusBarItem.text = `$(link) ${label} (${failCount} failed)`;
+                    } else {
+                        statusBarItem.color = undefined;
+                        statusBarItem.text = `$(link) ${label}`;
+                    }
                 }
             } catch { /* ignore */ }
         }
     }
-
     const markerWatcher = vscode.workspace.createFileSystemWatcher('**/{.pass,.fail}');
 
     // Fire both the Explorer update and the Status Bar update
     const onMarkerChange = (uri) => {
         refreshParents(uri);
-        refreshStatusBarColor(); 
+        refreshStatusBar();
     };
 
     markerWatcher.onDidCreate(onMarkerChange);
@@ -205,15 +230,15 @@ function activate(context) {
                 const stat = fs.statSync(topLevelUri.fsPath);
                 if (stat.isDirectory()) {
                     const label = path.relative(vscode.workspace.workspaceFolders[0].uri.fsPath, topLevelUri.fsPath);
-                    
+
                     statusBarItem.text = `$(link) ${label}`;
                     statusBarItem.command = {
                         command: 'badger.openLastTestFolder',
                         title: 'Open test folder',
                         arguments: [topLevelUri]
                     };
-                    
-                    refreshStatusBarColor(); // Set color before showing
+
+                    refreshStatusBar(); // Set color before showing
                     statusBarItem.show();
                 }
             }
@@ -292,8 +317,8 @@ function activate(context) {
                 title: 'Open test folder',
                 arguments: [newestFolder]
             };
-            
-            refreshStatusBarColor(); // Set color before showing
+
+            refreshStatusBar(); // Set color before showing
             statusBarItem.show();
         }
     };
